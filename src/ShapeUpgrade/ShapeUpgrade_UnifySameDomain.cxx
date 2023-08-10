@@ -135,11 +135,12 @@ static void UpdateBoundaries(const Handle(Geom2d_Curve)& thePCurve,
   }
 }
 
-static void RemoveEdgeFromMap(const TopoDS_Edge& theEdge,
+static Standard_Size RemoveEdgeFromMap(const TopoDS_Edge& theEdge,
                               TopTools_IndexedDataMapOfShapeListOfShape& theVEmap)
 {
   TopoDS_Vertex VV [2];
   TopExp::Vertices(theEdge, VV[0], VV[1]);
+  Standard_Size aNumRemovedEdges = 0;
   for (Standard_Integer i = 0; i < 2; i++)
   {
     TopTools_ListOfShape& Elist = theVEmap.ChangeFromKey(VV[i]);
@@ -147,12 +148,17 @@ static void RemoveEdgeFromMap(const TopoDS_Edge& theEdge,
     while (itl.More())
     {
       const TopoDS_Shape& anEdge = itl.Value();
-      if (anEdge.IsSame(theEdge))
-        Elist.Remove(itl);
+      if (anEdge.IsSame(theEdge)) {
+          Elist.Remove(itl);
+          aNumRemovedEdges++;
+      }
       else
-        itl.Next();
+      {
+          itl.Next();
+      }
     }
   }
+  return aNumRemovedEdges;
 }
 
 static Standard_Real ComputeMinEdgeSize(const TopTools_SequenceOfShape& theEdges,
@@ -321,7 +327,7 @@ static void RelocatePCurvesToNewUorigin(const TopTools_SequenceOfShape& theEdges
     gp_Pnt2d CurPoint = CurPCurve->Value(CurParam);
     for (;;) //collect pcurves of a contour
     {
-      RemoveEdgeFromMap(CurEdge, theVEmap);
+      Standard_Size aNumRemovedEdges = RemoveEdgeFromMap(CurEdge, theVEmap);
       theUsedEdges.Add(CurEdge);
       TopoDS_Vertex CurVertex = (anOr == TopAbs_FORWARD)?
         TopExp::LastVertex(CurEdge, Standard_True) : TopExp::FirstVertex(CurEdge, Standard_True);
@@ -330,6 +336,7 @@ static void RelocatePCurvesToNewUorigin(const TopTools_SequenceOfShape& theEdges
       if (Elist.IsEmpty())
         break; //end of contour in 3d
       
+      TopoDS_Edge aPriorEdge = CurEdge;
       TopTools_ListIteratorOfListOfShape itl(Elist);
       for (; itl.More(); itl.Next())
       {
@@ -367,6 +374,10 @@ static void RelocatePCurvesToNewUorigin(const TopTools_SequenceOfShape& theEdges
           aPCurve->LastParameter() : aPCurve->FirstParameter();
         CurPoint = aPCurve->Value(CurParam);
         break;
+      }
+
+      if (aNumRemovedEdges == 0 && CurEdge == aPriorEdge) {
+          break; // the current edge is not in theVEmap and theVEmap has no valid edges to advance to
       }
     } //for (;;) (collect pcurves of a contour)
   } //for (;;) (walk by contours)
